@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>3D E-Book Viewer</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/css/style.css" />
+  <style>
+    :root {
+      --bg: #12141a;
+      --bg-elevated: #1b1f29;
+      --bg-toolbar: rgba(16, 18, 24, 0.92);
+      --line: rgba(255, 255, 255, 0.08);
+      --text: #eef1f6;
+      --muted: #9aa3b5;
+      --accent: #d4a574;
+      --accent-2: #e8c39e;
+      --paper: #f7f2e9;
+      --toolbar-h: 58px;
+      --bottom-h: 72px;
+      --page-w: 420px;
+      --page-h: 594px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(1200px 700px at 50% 0%, #232838 0%, var(--bg) 55%);
+      color: var(--text);
+      font-family: "Pretendard", "Noto Sans KR", "Segoe UI", sans-serif;
+    }
+
+    button, input { font-family: inherit; }
+
+    #app {
+      display: grid;
+      grid-template-rows: var(--toolbar-h) 1fr var(--bottom-h);
+      height: 100%;
+    }
+
+    .toolbar, .bottom-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      background: var(--bg-toolbar);
+      border-color: var(--line);
+      backdrop-filter: blur(16px);
+      z-index: 20;
+    }
+
+    .toolbar { border-bottom: 1px solid var(--line); }
+    .bottom-bar { border-top: 1px solid var(--line); justify-content: center; }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-right: 8px;
+      min-width: 170px;
+    }
+
+    .brand i { color: var(--accent); font-size: 18px; }
+    .brand strong { font-size: 14px; letter-spacing: 0.02em; }
+    .brand span { display: block; color: var(--muted); font-size: 11px; font-weight: 400; }
+
+    .toolbar-group, .ctrl-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .toolbar-group + .toolbar-group {
+      padding-left: 10px;
+      margin-left: 4px;
+      border-left: 1px solid var(--line);
+    }
+
+    .spacer { flex: 1; }
+
+    .icon-btn, .text-btn {
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      height: 36px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: 0.18s ease;
+      white-space: nowrap;
+    }
+
+    .icon-btn { width: 36px; }
+    .text-btn { padding: 0 12px; font-size: 12px; }
+
+    .icon-btn:hover, .text-btn:hover {
+      background: rgba(212, 165, 116, 0.14);
+      border-color: rgba(212, 165, 116, 0.28);
+      color: var(--accent-2);
+    }
+
+    .icon-btn:disabled, .text-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      background: rgba(255, 255, 255, 0.03);
+      border-color: transparent;
+      color: var(--muted);
+    }
+
+    .icon-btn.active, .text-btn.active {
+      background: rgba(212, 165, 116, 0.2);
+      color: var(--accent-2);
+      border-color: rgba(212, 165, 116, 0.35);
+    }
+
+    #file-input { display: none; }
+
+    /* 측정용으로 쓰지 않음. 캔버스/이미지 보호 보관소 */
+    #page-store {
+      position: absolute;
+      left: -9999px;
+      top: 0;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .zoom-label {
+      min-width: 48px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    #stage {
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #stage.dragover::after {
+      content: "PDF 파일을 놓으면 책을 엽니다";
+      position: absolute;
+      inset: 16px;
+      border: 2px dashed var(--accent);
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(212, 165, 116, 0.08);
+      color: var(--accent-2);
+      font-size: 18px;
+      z-index: 30;
+      pointer-events: none;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: var(--muted);
+      max-width: 420px;
+      padding: 24px;
+    }
+
+    .empty-state i {
+      font-size: 46px;
+      color: var(--accent);
+      margin-bottom: 14px;
+    }
+
+    .empty-state h2 {
+      color: var(--text);
+      font-size: 22px;
+      margin-bottom: 8px;
+    }
+
+    .empty-state p { font-size: 14px; line-height: 1.6; }
+
+    .book-viewport {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: default;
+      touch-action: none;
+    }
+
+    .book-viewport.is-panning { cursor: grab; }
+    .book-viewport.is-panning.dragging { cursor: grabbing; }
+
+    /* 줌=1일 때는 transform을 제거해야 PageFlip 3D가 사라지지 않는다 */
+    .book-zoom-layer {
+      transform-origin: center center;
+      transform-style: preserve-3d;
+    }
+
+    .book-scene {
+      position: relative;
+      transform-style: preserve-3d;
+    }
+
+    .book-scene.spread::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 4%;
+      width: 28px;
+      height: 92%;
+      transform: translateX(-50%);
+      background: linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.18) 46%, rgba(0,0,0,.28) 50%, rgba(0,0,0,.16) 54%, rgba(0,0,0,0) 100%);
+      pointer-events: none;
+      z-index: 8;
+      mix-blend-mode: multiply;
+      opacity: 0.9;
+    }
+
+    #book-host {
+      position: relative;
+      margin: 0 auto;
+      width: var(--page-w);
+      height: var(--page-h);
+      overflow: visible;
+      transform-style: preserve-3d;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4), 0 40px 70px rgba(0, 0, 0, 0.22);
+    }
+
+    #book-host.spread { width: calc(var(--page-w) * 2); }
+
+    #book {
+      margin: 0 auto;
+      transform-style: preserve-3d;
+    }
+
+    #book .page-sheet,
+    #book .stf__item,
+    #book .stf__item .page-sheet {
+      width: var(--page-w) !important;
+      height: var(--page-h) !important;
+      overflow: hidden !important;
+      background: var(--paper);
+      box-sizing: border-box;
+    }
+
+    .page-inner {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--paper);
+    }
+
+    .page-inner img,
+    .page-inner canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .pan-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 12;
+      display: none;
+    }
+
+    .book-viewport.is-panning .pan-overlay { display: block; }
+
+    .page-indicator {
+      min-width: 92px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .page-indicator small { color: var(--muted); }
+
+    #page-slider {
+      width: min(420px, 42vw);
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .toast {
+      position: absolute;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%) translateY(12px);
+      background: #2a3142;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: 0.25s ease;
+      z-index: 40;
+      max-width: min(520px, 90%);
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .toast.error { border-color: rgba(240, 160, 160, 0.35); color: #ffe4e4; }
+
+    .loading-modal {
+      position: absolute;
+      inset: 0;
+      background: rgba(8, 10, 14, 0.62);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+
+    .loading-modal.show { display: flex; }
+
+    .loading-card {
+      width: min(420px, 90%);
+      background: var(--bg-elevated);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 28px 24px;
+      text-align: center;
+    }
+
+    .spinner {
+      width: 42px;
+      height: 42px;
+      border: 3px solid rgba(255,255,255,0.12);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      margin: 0 auto 16px;
+      animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .progress {
+      margin-top: 16px;
+      height: 8px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress > span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width 0.2s ease;
+    }
+
+    .password-box { display: none; margin-top: 14px; gap: 8px; }
+    .password-box.show { display: flex; }
+
+    .password-box input {
+      flex: 1;
+      height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #12141a;
+      color: var(--text);
+      padding: 0 12px;
+    }
+
+    @media (max-width: 860px) {
+      .brand span, .text-btn span { display: none; }
+      .brand { min-width: auto; }
+      #page-slider { width: min(180px, 30vw); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header class="toolbar">
+      <div class="brand">
+        <i class="fa-solid fa-book-open"></i>
+        <div>
+          <strong>3D E-Book Viewer</strong>
+          <span>고해상도 PDF 책넘김 뷰어</span>
+        </div>
+      </div>
+
+      <div class="toolbar-group">
+        <input id="file-input" type="file" accept="application/pdf,.pdf" />
+        <label for="file-input" class="text-btn" title="PDF 열기">
+          <i class="fa-solid fa-folder-open"></i><span>파일 열기</span>
+        </label>
+      </div>
+
+      <div class="toolbar-group">
+        <button id="btn-single" class="text-btn" disabled title="1페이지씩 보기">
+          <i class="fa-solid fa-file"></i><span>1페이지</span>
+        </button>
+        <button id="btn-spread" class="text-btn" disabled title="펼침 보기">
+          <i class="fa-solid fa-book"></i><span>2페이지</span>
+        </button>
+      </div>
+
+      <div class="toolbar-group">
+        <button id="btn-zoom-out" class="icon-btn" disabled title="축소"><i class="fa-solid fa-minus"></i></button>
+        <div id="zoom-label" class="zoom-label">100%</div>
+        <button id="btn-zoom-in" class="icon-btn" disabled title="확대"><i class="fa-solid fa-plus"></i></button>
+        <button id="btn-zoom-reset" class="text-btn" disabled title="돋보기 원래대로">
+          <i class="fa-solid fa-magnifying-glass"></i><span>원래대로</span>
+        </button>
+      </div>
+
+      <div class="spacer"></div>
+
+      <button id="btn-fullscreen" class="icon-btn" title="전체화면">
+        <i class="fa-solid fa-expand"></i>
+      </button>
+    </header>
+
+    <main id="stage">
+      <div id="empty-state" class="empty-state">
+        <i class="fa-regular fa-file-pdf"></i>
+        <h2>PDF를 책처럼 펼쳐 보세요</h2>
+        <p>상단의 파일 열기를 누르거나, 이 영역에 PDF를 끌어다 놓으면<br />한 장씩 넘기는 3D 종이책으로 렌더링합니다.</p>
+      </div>
+
+      <div id="book-viewport" class="book-viewport">
+        <div id="zoom-layer" class="book-zoom-layer">
+          <div id="book-scene" class="book-scene">
+            <div id="book-host">
+              <div id="book"></div>
+            </div>
+          </div>
+        </div>
+        <div id="pan-overlay" class="pan-overlay"></div>
+      </div>
+
+      <div id="page-store"></div>
+      <div id="toast" class="toast"></div>
+
+      <div id="loading-modal" class="loading-modal">
+        <div class="loading-card">
+          <div class="spinner"></div>
+          <p id="loading-text">PDF를 준비하는 중...</p>
+          <div class="progress"><span id="progress-bar"></span></div>
+          <div id="password-box" class="password-box">
+            <input id="pdf-password" type="password" placeholder="PDF 비밀번호" />
+            <button id="btn-password" class="text-btn">열기</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="bottom-bar">
+      <div class="ctrl-group">
+        <button id="btn-prev" class="icon-btn" disabled title="이전 페이지"><i class="fa-solid fa-chevron-left"></i></button>
+        <input id="page-slider" type="range" min="1" max="1" value="1" disabled />
+        <button id="btn-next" class="icon-btn" disabled title="다음 페이지"><i class="fa-solid fa-chevron-right"></i></button>
+        <div id="page-indicator" class="page-indicator">0 <small>/ 0</small></div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+  <script>
+    /* =========================================================
+       3D E-Book Viewer
+       PDF Load / Render / PageFlip Sync / Zoom Controller
+       ========================================================= */
+
+    const PDFJS_VERSION = "3.11.174";
+    const WORKER_CANDIDATES = [
+      `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`,
+      `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.js`,
+      `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.js`
+    ];
+    const CMAP_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/cmaps/`;
+    const FONT_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`;
+
+    const els = {
+      app: document.getElementById("app"),
+      stage: document.getElementById("stage"),
+      fileInput: document.getElementById("file-input"),
+      empty: document.getElementById("empty-state"),
+      viewport: document.getElementById("book-viewport"),
+      zoomLayer: document.getElementById("zoom-layer"),
+      scene: document.getElementById("book-scene"),
+      host: document.getElementById("book-host"),
+      book: document.getElementById("book"),
+      pageStore: document.getElementById("page-store"),
+      toast: document.getElementById("toast"),
+      loading: document.getElementById("loading-modal"),
+      loadingText: document.getElementById("loading-text"),
+      progressBar: document.getElementById("progress-bar"),
+      passwordBox: document.getElementById("password-box"),
+      passwordInput: document.getElementById("pdf-password"),
+      btnPassword: document.getElementById("btn-password"),
+      btnSingle: document.getElementById("btn-single"),
+      btnSpread: document.getElementById("btn-spread"),
+      btnZoomIn: document.getElementById("btn-zoom-in"),
+      btnZoomOut: document.getElementById("btn-zoom-out"),
+      btnZoomReset: document.getElementById("btn-zoom-reset"),
+      zoomLabel: document.getElementById("zoom-label"),
+      btnFullscreen: document.getElementById("btn-fullscreen"),
+      btnPrev: document.getElementById("btn-prev"),
+      btnNext: document.getElementById("btn-next"),
+      slider: document.getElementById("page-slider"),
+      indicator: document.getElementById("page-indicator")
+    };
+
+    const state = {
+      pdf: null,
+      pageCount: 0,
+      currentPage: 0,
+      viewMode: "single",
+      pageFlip: null,
+      pageImages: [],
+      pageUrls: [],
+      renderTasks: new Map(),
+      pageAspect: 0.707,
+      bookWidth: 420,
+      bookHeight: 594,
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      isPanning: false,
+      panStartX: 0,
+      panStartY: 0,
+      pointerStartX: 0,
+      pointerStartY: 0,
+      pinchStartDist: 0,
+      pinchStartZoom: 1,
+      navigating: false,
+      rebuilding: false,
+      rebuildQueued: null,
+      workerReady: false,
+      pendingPasswordBytes: null
+    };
+
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+    const yieldFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
+    /* -------------------- PDF Worker -------------------- */
+    async function setupPdfWorker() {
+      if (!window.pdfjsLib) throw new Error("PDF.js 로드 실패");
+      let lastError = null;
+      for (let i = 0; i < WORKER_CANDIDATES.length; i++) {
+        const url = WORKER_CANDIDATES[i];
+        try {
+          const response = await fetch(url, { mode: "cors" });
+          if (!response.ok) throw new Error("worker fetch " + response.status);
+          const code = await response.text();
+          pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(
+            new Blob([code], { type: "application/javascript" })
+          );
+          state.workerReady = true;
+          return;
+        } catch (err) {
+          lastError = err;
+          await sleep(250 * (i + 1));
+        }
+      }
+      pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_CANDIDATES[0];
+      state.workerReady = true;
+      console.warn("PDF.js worker blob fallback 실패", lastError);
+    }
+
+    /* -------------------- UI helpers -------------------- */
+    function setLoading(show, text) {
+      els.loading.classList.toggle("show", show);
+      if (text) els.loadingText.textContent = text;
+      if (!show) {
+        els.progressBar.style.width = "0%";
+        els.passwordBox.classList.remove("show");
+      }
+    }
+
+    function setProgress(current, total) {
+      els.progressBar.style.width = (total ? Math.round((current / total) * 100) : 0) + "%";
+      els.loadingText.textContent = `페이지 렌더링 중 ${current} / ${total}`;
+    }
+
+    let toastTimer = null;
+    function showToast(message, isError) {
+      els.toast.textContent = message;
+      els.toast.classList.toggle("error", !!isError);
+      els.toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => els.toast.classList.remove("show"), 4200);
+    }
+
+    function setControlsEnabled(enabled) {
+      [els.btnSingle, els.btnSpread, els.btnZoomIn, els.btnZoomOut,
+        els.btnZoomReset, els.btnPrev, els.btnNext, els.slider
+      ].forEach((el) => { el.disabled = !enabled; });
+    }
+
+    function applyPageMetrics() {
+      document.documentElement.style.setProperty("--page-w", state.bookWidth + "px");
+      document.documentElement.style.setProperty("--page-h", state.bookHeight + "px");
+      const spread = state.viewMode === "spread";
+      els.host.classList.toggle("spread", spread);
+      els.scene.classList.toggle("spread", spread);
+      els.host.style.width = (spread ? state.bookWidth * 2 : state.bookWidth) + "px";
+      els.host.style.height = state.bookHeight + "px";
+    }
+
+    function updateModeButtons() {
+      els.btnSingle.classList.toggle("active", state.viewMode === "single");
+      els.btnSpread.classList.toggle("active", state.viewMode === "spread");
+    }
+
+    function updatePageUI() {
+      const total = state.pageCount;
+      const current = total ? state.currentPage + 1 : 0;
+      els.slider.max = String(Math.max(1, total));
+      els.slider.value = String(Math.max(1, current));
+      els.indicator.innerHTML = `${current} <small>/ ${total}</small>`;
+      els.btnPrev.disabled = !total || state.currentPage <= 0;
+      els.btnNext.disabled = !total || state.currentPage >= total - 1;
+    }
+
+    /* -------------------- Zoom Controller -------------------- */
+    function isIdentityZoom() {
+      return state.zoom <= 1.001 && Math.abs(state.panX) < 0.5 && Math.abs(state.panY) < 0.5;
+    }
+
+    function applyZoomTransform() {
+      els.zoomLabel.textContent = Math.round(state.zoom * 100) + "%";
+      els.viewport.classList.toggle("is-panning", state.zoom > 1.001);
+
+      if (isIdentityZoom()) {
+        state.zoom = 1;
+        state.panX = 0;
+        state.panY = 0;
+        els.zoomLayer.style.transition = "";
+        els.zoomLayer.style.transform = "none";
+        els.zoomLabel.textContent = "100%";
+        els.viewport.classList.remove("is-panning");
+        return;
+      }
+
+      els.zoomLayer.style.transform =
+        `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
+    }
+
+    function setZoom(next, keepPan) {
+      state.zoom = clamp(Number(Number(next).toFixed(3)), 1, 3);
+      if (state.zoom <= 1 || !keepPan) {
+        state.panX = 0;
+        state.panY = 0;
+      }
+      applyZoomTransform();
+    }
+
+    function animateZoomReset() {
+      return new Promise((resolve) => {
+        if (isIdentityZoom()) {
+          setZoom(1);
+          resolve();
+          return;
+        }
+        els.zoomLayer.style.transition = "transform 0.2s ease";
+        state.zoom = 1;
+        state.panX = 0;
+        state.panY = 0;
+        els.zoomLayer.style.transform = "translate(0px, 0px) scale(1)";
+        els.zoomLabel.textContent = "100%";
+
+        let finished = false;
+        const done = () => {
+          if (finished) return;
+          finished = true;
+          els.zoomLayer.style.transition = "";
+          els.zoomLayer.style.transform = "none";
+          els.viewport.classList.remove("is-panning", "dragging");
+          els.zoomLayer.removeEventListener("transitionend", done);
+          resolve();
+        };
+        els.zoomLayer.addEventListener("transitionend", done);
+        setTimeout(done, 240);
+      });
+    }
+
+    function zoomBy(delta) {
+      setZoom(state.zoom + delta, true);
+    }
+
+    function onWheelZoom(event) {
+      if (!state.pageFlip) return;
+      event.preventDefault();
+      const dir = event.deltaY > 0 ? -0.12 : 0.12;
+      setZoom(state.zoom + dir, state.zoom + dir > 1);
+    }
+
+    function distanceOfTouches(t1, t2) {
+      return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+    }
+
+    function onPointerDown(event) {
+      if (state.zoom <= 1.001) return;
+      state.isPanning = true;
+      els.viewport.classList.add("dragging");
+      state.pointerStartX = event.clientX;
+      state.pointerStartY = event.clientY;
+      state.panStartX = state.panX;
+      state.panStartY = state.panY;
+    }
+
+    function onPointerMove(event) {
+      if (!state.isPanning) return;
+      state.panX = state.panStartX + (event.clientX - state.pointerStartX);
+      state.panY = state.panStartY + (event.clientY - state.pointerStartY);
+      applyZoomTransform();
+    }
+
+    function onPointerUp() {
+      state.isPanning = false;
+      els.viewport.classList.remove("dragging");
+    }
+
+    function onTouchStart(event) {
+      if (!state.pageFlip) return;
+      if (event.touches.length === 2) {
+        event.preventDefault();
+        state.pinchStartDist = distanceOfTouches(event.touches[0], event.touches[1]);
+        state.pinchStartZoom = state.zoom;
+        state.isPanning = false;
+      } else if (event.touches.length === 1 && state.zoom > 1.001) {
+        const t = event.touches[0];
+        state.isPanning = true;
+        state.pointerStartX = t.clientX;
+        state.pointerStartY = t.clientY;
+        state.panStartX = state.panX;
+        state.panStartY = state.panY;
+      }
+    }
+
+    function onTouchMove(event) {
+      if (!state.pageFlip) return;
+      if (event.touches.length === 2) {
+        event.preventDefault();
+        const dist = distanceOfTouches(event.touches[0], event.touches[1]);
+        if (state.pinchStartDist > 0) {
+          setZoom(state.pinchStartZoom * (dist / state.pinchStartDist), true);
+        }
+      } else if (state.isPanning && event.touches.length === 1) {
+        event.preventDefault();
+        const t = event.touches[0];
+        state.panX = state.panStartX + (t.clientX - state.pointerStartX);
+        state.panY = state.panStartY + (t.clientY - state.pointerStartY);
+        applyZoomTransform();
+      }
+    }
+
+    /* -------------------- PDF Load -------------------- */
+    function readFileAsArrayBuffer(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function friendlyPdfError(err) {
+      if (!err) return "PDF를 열 수 없습니다. 다른 파일로 다시 시도해 주세요.";
+      if (err.name === "PasswordException") {
+        return err.code === 2
+          ? "비밀번호가 올바르지 않습니다. 다시 입력해 주세요."
+          : "이 PDF는 암호화되어 있습니다. 비밀번호를 입력하면 열 수 있습니다.";
+      }
+      if (err.name === "InvalidPDFException" || /invalid pdf/i.test(String(err.message))) {
+        return "손상되었거나 지원하지 않는 PDF입니다. 파일이 완전한지 확인해 주세요.";
+      }
+      if (err.name === "MissingPDFException") {
+        return "PDF 데이터를 찾지 못했습니다. 파일을 다시 선택해 주세요.";
+      }
+      return "PDF를 표시하는 중 문제가 발생했습니다. 암호화·손상 여부를 확인해 주세요.";
+    }
+
+    async function openPdfDocument(data, password) {
+      const options = {
+        data,
+        password: password || "",
+        cMapUrl: CMAP_URL,
+        cMapPacked: true,
+        standardFontDataUrl: FONT_URL,
+        isEvalSupported: false,
+        useSystemFonts: true,
+        disableAutoFetch: false,
+        disableStream: true
+      };
+      let lastError = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          return await pdfjsLib.getDocument(options).promise;
+        } catch (err) {
+          lastError = err;
+          if (err && err.name === "PasswordException") throw err;
+          await sleep(320 * (attempt + 1));
+        }
+      }
+      throw lastError;
+    }
+
+    async function cancelAllRenders() {
+      const tasks = [...state.renderTasks.values()];
+      state.renderTasks.clear();
+      await Promise.all(tasks.map(async (task) => {
+        try { if (task && typeof task.cancel === "function") task.cancel(); } catch (_) { /* ignore */ }
+      }));
+    }
+
+    function revokePageUrls() {
+      state.pageUrls.forEach((url) => {
+        try { URL.revokeObjectURL(url); } catch (_) { /* ignore */ }
+      });
+      state.pageUrls = [];
+      state.pageImages = [];
+    }
+
+    function computeBookSize() {
+      const rect = els.stage.getBoundingClientRect();
+      const availW = Math.max(240, rect.width - 48);
+      const availH = Math.max(260, rect.height - 36);
+      const aspect = state.pageAspect || 0.707;
+      const spread = state.viewMode === "spread";
+
+      let height = availH;
+      let width = height * aspect;
+
+      if (spread) {
+        if (width * 2 > availW) {
+          width = availW / 2;
+          height = width / aspect;
+        }
+      } else if (width > availW) {
+        width = availW;
+        height = width / aspect;
+      }
+
+      return {
+        width: Math.max(180, Math.floor(width)),
+        height: Math.max(220, Math.floor(height))
+      };
+    }
+
+    /* -------------------- Render -------------------- */
+    function canvasToObjectUrl(canvas) {
+      return new Promise((resolve, reject) => {
+        try {
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              resolve(canvas.toDataURL("image/jpeg", 0.92));
+              return;
+            }
+            const url = URL.createObjectURL(blob);
+            state.pageUrls.push(url);
+            resolve(url);
+          }, "image/jpeg", 0.93);
+        } catch (err) {
+          try { resolve(canvas.toDataURL("image/jpeg", 0.92)); }
+          catch (err2) { reject(err2); }
+        }
+      });
+    }
+
+    async function renderPdfPage(pageNumber, displayWidth, displayHeight) {
+      const page = await state.pdf.getPage(pageNumber);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      const unscaled = page.getViewport({ scale: 1 });
+      const cssScale = displayWidth / unscaled.width;
+      let viewport = page.getViewport({ scale: cssScale * dpr });
+
+      const maxSide = 4096;
+      if (viewport.width > maxSide || viewport.height > maxSide) {
+        const fit = Math.min(maxSide / viewport.width, maxSide / viewport.height);
+        viewport = page.getViewport({ scale: cssScale * dpr * fit });
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+
+      const prev = state.renderTasks.get(pageNumber);
+      if (prev && typeof prev.cancel === "function") {
+        try { prev.cancel(); } catch (_) { /* ignore */ }
+      }
+
+      const ctx = canvas.getContext("2d", { alpha: false });
+      ctx.fillStyle = "#f7f2e9";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const task = page.render({ canvasContext: ctx, viewport, intent: "display" });
+      state.renderTasks.set(pageNumber, task);
+
+      try {
+        await task.promise;
+      } catch (err) {
+        if (err && (err.name === "RenderingCancelledException" || /cancel/i.test(err.message || ""))) {
+          return null;
+        }
+        throw err;
+      } finally {
+        if (state.renderTasks.get(pageNumber) === task) state.renderTasks.delete(pageNumber);
+      }
+
+      const url = await canvasToObjectUrl(canvas);
+      const img = new Image();
+      img.alt = `${pageNumber}페이지`;
+      img.draggable = false;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = url;
+      });
+      return img;
+    }
+
+    async function renderAllPages() {
+      await cancelAllRenders();
+      revokePageUrls();
+      els.pageStore.innerHTML = "";
+
+      const size = computeBookSize();
+      state.bookWidth = size.width;
+      state.bookHeight = size.height;
+      applyPageMetrics();
+
+      for (let i = 1; i <= state.pageCount; i++) {
+        const img = await renderPdfPage(i, size.width, size.height);
+        if (img) {
+          img.style.width = "100%";
+          img.style.height = "100%";
+          state.pageImages.push(img);
+          els.pageStore.appendChild(img);
+        }
+        setProgress(i, state.pageCount);
+        await yieldFrame();
+        if (i % 2 === 0) await sleep(0);
+      }
+    }
+
+    /* -------------------- PageFlip Sync -------------------- */
+    function buildPageSheets() {
+      return state.pageImages.map((img, index) => {
+        const sheet = document.createElement("div");
+        sheet.className = "page-sheet";
+        sheet.dataset.page = String(index + 1);
+        sheet.style.width = state.bookWidth + "px";
+        sheet.style.height = state.bookHeight + "px";
+
+        const inner = document.createElement("div");
+        inner.className = "page-inner";
+
+        const pageImg = new Image();
+        pageImg.alt = img.alt;
+        pageImg.draggable = false;
+        pageImg.src = img.src;
+        inner.appendChild(pageImg);
+        sheet.appendChild(inner);
+        return sheet;
+      });
+    }
+
+    function resetBookElement() {
+      const fresh = document.createElement("div");
+      fresh.id = "book";
+      if (els.book && els.book.parentElement) {
+        els.book.replaceWith(fresh);
+      } else {
+        els.host.appendChild(fresh);
+      }
+      els.book = fresh;
+    }
+
+    function destroyPageFlip() {
+      /* destroy 전에 원본 이미지를 스토어로 되돌려 비트맵이 지워지지 않게 한다 */
+      state.pageImages.forEach((img) => {
+        if (img && img.parentElement !== els.pageStore) els.pageStore.appendChild(img);
+      });
+      if (state.pageFlip) {
+        try { state.pageFlip.destroy(); } catch (_) { /* ignore */ }
+        state.pageFlip = null;
+      }
+      resetBookElement();
+    }
+
+    function createPageFlip(startPage) {
+      const PageFlipCtor = window.St && window.St.PageFlip;
+      if (!PageFlipCtor) throw new Error("PageFlip 라이브러리를 불러오지 못했습니다.");
+      if (!state.pageImages.length) throw new Error("표시할 페이지가 없습니다.");
+
+      resetBookElement();
+      applyPageMetrics();
+
+      const isSingle = state.viewMode !== "spread";
+      const sheets = buildPageSheets();
+      sheets.forEach((sheet) => els.book.appendChild(sheet));
+
+      const flip = new PageFlipCtor(els.book, {
+        width: state.bookWidth,
+        height: state.bookHeight,
+        size: "fixed",
+        minWidth: Math.max(120, Math.floor(state.bookWidth * 0.8)),
+        maxWidth: Math.ceil(state.bookWidth * (isSingle ? 1 : 2)),
+        minHeight: Math.max(160, Math.floor(state.bookHeight * 0.8)),
+        maxHeight: state.bookHeight,
+        drawShadow: true,
+        maxShadowOpacity: 0.7,
+        flippingTime: 800,
+        usePortrait: isSingle,
+        startZIndex: 1,
+        autoSize: false,
+        showCover: false,
+        mobileScrollSupport: false,
+        swipeDistance: 28,
+        clickEventForward: true,
+        useMouseEvents: true,
+        showPageCorners: true,
+        disableFlipByClick: false,
+        startPage: startPage || 0
+      });
+
+      flip.loadFromHTML(sheets);
+
+      flip.on("flip", (e) => {
+        state.currentPage = e.data;
+        updatePageUI();
+      });
+
+      state.pageFlip = flip;
+      const safeStart = clamp(startPage || 0, 0, Math.max(0, state.pageCount - 1));
+      try { flip.turnToPage(safeStart); } catch (_) { /* ignore */ }
+      state.currentPage = flip.getCurrentPageIndex();
+      updatePageUI();
+      updateModeButtons();
+    }
+
+    async function rebuildPageFlip(keepPage) {
+      if (!state.pdf) return;
+      if (state.rebuilding) {
+        state.rebuildQueued = typeof keepPage === "number" ? keepPage : state.currentPage;
+        return;
+      }
+      state.rebuilding = true;
+      const page = typeof keepPage === "number" ? keepPage : state.currentPage;
+      try {
+        await animateZoomReset();
+        const size = computeBookSize();
+        state.bookWidth = size.width;
+        state.bookHeight = size.height;
+        destroyPageFlip();
+        applyPageMetrics();
+        await yieldFrame();
+        createPageFlip(page);
+      } catch (err) {
+        console.error(err);
+        showToast("책 화면을 다시 그리는 중 문제가 발생했습니다.", true);
+      } finally {
+        state.rebuilding = false;
+        if (state.rebuildQueued !== null) {
+          const queued = state.rebuildQueued;
+          state.rebuildQueued = null;
+          await rebuildPageFlip(queued);
+        }
+      }
+    }
+
+    async function switchViewMode(mode) {
+      if (!state.pdf || state.viewMode === mode || state.rebuilding) return;
+      const page = state.pageFlip ? state.pageFlip.getCurrentPageIndex() : state.currentPage;
+      state.viewMode = mode;
+      updateModeButtons();
+      await rebuildPageFlip(page);
+    }
+
+    /* -------------------- Navigation -------------------- */
+    async function withZoomResetThen(action) {
+      if (!state.pageFlip || state.navigating) return;
+      state.navigating = true;
+      try {
+        await animateZoomReset();
+        action();
+      } catch (err) {
+        showToast("페이지를 이동하는 중 문제가 발생했습니다. 다시 시도해 주세요.", true);
+      } finally {
+        state.navigating = false;
+      }
+    }
+
+    function goToIndex(index, animated) {
+      if (!state.pageFlip) return;
+      const idx = clamp(index, 0, state.pageCount - 1);
+      const current = state.pageFlip.getCurrentPageIndex();
+      if (idx === current) {
+        state.currentPage = idx;
+        updatePageUI();
+        return;
+      }
+      try {
+        if (animated) state.pageFlip.flip(idx);
+        else state.pageFlip.turnToPage(idx);
+        state.currentPage = state.pageFlip.getCurrentPageIndex();
+      } catch (_) {
+        try {
+          state.pageFlip.turnToPage(idx);
+          state.currentPage = idx;
+        } catch (err2) { /* ignore */ }
+      }
+      updatePageUI();
+    }
+
+    function goPrev() {
+      withZoomResetThen(() => goToIndex(state.pageFlip.getCurrentPageIndex() - 1, true));
+    }
+
+    function goNext() {
+      withZoomResetThen(() => goToIndex(state.pageFlip.getCurrentPageIndex() + 1, true));
+    }
+
+    function goToSliderPage(pageIndex) {
+      withZoomResetThen(() => goToIndex(pageIndex, false));
+    }
+
+    /* -------------------- Document lifecycle -------------------- */
+    async function loadPdfFromBytes(bytes, password) {
+      setLoading(true, "PDF를 해석하는 중...");
+      els.passwordBox.classList.remove("show");
+
+      try {
+        if (!state.workerReady) await setupPdfWorker();
+        await cancelAllRenders();
+        destroyPageFlip();
+        revokePageUrls();
+
+        if (state.pdf) {
+          try { await state.pdf.destroy(); } catch (_) { /* ignore */ }
+        }
+
+        state.pdf = await openPdfDocument(bytes, password);
+        state.pageCount = state.pdf.numPages;
+        state.currentPage = 0;
+        state.viewMode = "single";
+
+        const firstPage = await state.pdf.getPage(1);
+        const base = firstPage.getViewport({ scale: 1 });
+        state.pageAspect = base.width / base.height;
+
+        els.empty.style.display = "none";
+        els.viewport.style.display = "flex";
+
+        await renderAllPages();
+        setZoom(1);
+        await yieldFrame();
+        createPageFlip(0);
+        setControlsEnabled(true);
+        updateModeButtons();
+        setLoading(false);
+        showToast("한 장씩 넘길 수 있습니다. 모서리를 잡거나 하단 버튼으로 이동하세요.");
+      } catch (err) {
+        console.error(err);
+        if (err && err.name === "PasswordException") {
+          state.pendingPasswordBytes = bytes;
+          els.loadingText.textContent = friendlyPdfError(err);
+          els.passwordBox.classList.add("show");
+          els.passwordInput.value = "";
+          els.passwordInput.focus();
+          els.loading.classList.add("show");
+          return;
+        }
+        setLoading(false);
+        setControlsEnabled(false);
+        els.viewport.style.display = "none";
+        els.empty.style.display = "block";
+        showToast(friendlyPdfError(err), true);
+      }
+    }
+
+    async function handleFile(file) {
+      if (!file) return;
+      if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") {
+        showToast("PDF 파일만 열 수 있습니다.", true);
+        return;
+      }
+      try {
+        const buffer = await readFileAsArrayBuffer(file);
+        await loadPdfFromBytes(new Uint8Array(buffer));
+      } catch (err) {
+        showToast("파일을 읽는 중 문제가 발생했습니다.", true);
+      }
+    }
+
+    /* -------------------- Events -------------------- */
+    els.fileInput.addEventListener("click", () => { els.fileInput.value = ""; });
+    els.fileInput.addEventListener("change", (event) => {
+      const file = event.target.files && event.target.files[0];
+      handleFile(file);
+      event.target.value = "";
+    });
+
+    ["dragenter", "dragover"].forEach((type) => {
+      els.stage.addEventListener(type, (event) => {
+        event.preventDefault();
+        els.stage.classList.add("dragover");
+      });
+    });
+    ["dragleave", "drop"].forEach((type) => {
+      els.stage.addEventListener(type, (event) => {
+        event.preventDefault();
+        els.stage.classList.remove("dragover");
+      });
+    });
+    els.stage.addEventListener("drop", (event) => {
+      event.preventDefault();
+      els.stage.classList.remove("dragover");
+      handleFile(event.dataTransfer.files && event.dataTransfer.files[0]);
+    });
+
+    els.btnSingle.addEventListener("click", () => switchViewMode("single"));
+    els.btnSpread.addEventListener("click", () => switchViewMode("spread"));
+    els.btnZoomIn.addEventListener("click", () => zoomBy(0.25));
+    els.btnZoomOut.addEventListener("click", () => zoomBy(-0.25));
+    els.btnZoomReset.addEventListener("click", () => animateZoomReset());
+    els.btnPrev.addEventListener("click", goPrev);
+    els.btnNext.addEventListener("click", goNext);
+    els.slider.addEventListener("change", (event) => goToSliderPage(Number(event.target.value) - 1));
+
+    els.btnFullscreen.addEventListener("click", async () => {
+      try {
+        if (!document.fullscreenElement) await els.app.requestFullscreen();
+        else await document.exitFullscreen();
+      } catch (_) {
+        showToast("이 브라우저에서는 전체화면을 사용할 수 없습니다.", true);
+      }
+    });
+
+    document.addEventListener("fullscreenchange", () => {
+      const icon = els.btnFullscreen.querySelector("i");
+      icon.className = document.fullscreenElement ? "fa-solid fa-compress" : "fa-solid fa-expand";
+      if (state.pdf) {
+        const page = state.pageFlip ? state.pageFlip.getCurrentPageIndex() : state.currentPage;
+        rebuildPageFlip(page);
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (!state.pageFlip) return;
+      if (event.target && ["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        goNext();
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        goPrev();
+      } else if (event.key === "Escape" && state.zoom > 1) {
+        animateZoomReset();
+      }
+    });
+
+    els.viewport.addEventListener("wheel", onWheelZoom, { passive: false });
+    els.panOverlay.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    els.viewport.addEventListener("touchstart", onTouchStart, { passive: false });
+    els.viewport.addEventListener("touchmove", onTouchMove, { passive: false });
+    els.viewport.addEventListener("touchend", onPointerUp);
+
+    els.btnPassword.addEventListener("click", () => {
+      if (!state.pendingPasswordBytes) return;
+      loadPdfFromBytes(state.pendingPasswordBytes, els.passwordInput.value);
+    });
+    els.passwordInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") els.btnPassword.click();
+    });
+
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+      if (!state.pdf) return;
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        const page = state.pageFlip ? state.pageFlip.getCurrentPageIndex() : state.currentPage;
+        rebuildPageFlip(page);
+      }, 220);
+    });
+
+    setupPdfWorker().catch((err) => console.warn("Worker 초기화 지연:", err));
+    updateModeButtons();
+    setControlsEnabled(false);
+  </script>
+</body>
+</html>
