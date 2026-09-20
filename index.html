@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>수시 경쟁률 체크 페이지[도영]</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base: #0f1526;
+    --bg-panel: #151d34;
+    --bg-row: #1b2440;
+    --bg-row-hover: #212c4d;
+    --accent-amber: #e8a93b;
+    --accent-amber-dim: #8c6a2a;
+    --text-primary: #f4f1e8;
+    --text-secondary: #7c86a6;
+    --divider: #2a3459;
+    --live-green: #4caf7d;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse at top, #182240 0%, var(--bg-base) 55%);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 56px 20px 80px;
+  }
+
+  main {
+    width: 100%;
+    max-width: 620px;
+  }
+
+  .board {
+    background: var(--bg-panel);
+    border: 1px solid var(--divider);
+    border-radius: 4px;
+    padding: 40px 36px 32px;
+    box-shadow: 0 40px 80px -30px rgba(0,0,0,0.6);
+  }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--live-green);
+    box-shadow: 0 0 0 0 rgba(76,175,125,0.6);
+    animation: pulse 2.2s infinite;
+  }
+
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(76,175,125,0.5); }
+    70%  { box-shadow: 0 0 0 7px rgba(76,175,125,0); }
+    100% { box-shadow: 0 0 0 0 rgba(76,175,125,0); }
+  }
+
+  .status-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: var(--live-green);
+  }
+
+  h1 {
+    font-family: 'Black Han Sans', sans-serif;
+    font-weight: 400;
+    font-size: clamp(30px, 6vw, 42px);
+    line-height: 1.15;
+    margin: 0 0 12px;
+    color: var(--text-primary);
+    letter-spacing: 0.01em;
+  }
+
+  .subtitle {
+    font-size: 15px;
+    color: var(--text-secondary);
+    margin: 0 0 32px;
+    line-height: 1.6;
+  }
+
+  .subtitle strong {
+    color: var(--accent-amber);
+    font-weight: 600;
+  }
+
+  .divider-line {
+    height: 1px;
+    background: linear-gradient(90deg, var(--divider), transparent);
+    margin-bottom: 8px;
+  }
+
+  ul.school-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .school-list li {
+    border-bottom: 1px solid var(--divider);
+  }
+
+  .school-list li:last-child {
+    border-bottom: none;
+  }
+
+  .school-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px 8px;
+    text-decoration: none;
+    color: inherit;
+    background: transparent;
+    border-radius: 3px;
+    transition: background-color 0.18s ease, padding-left 0.18s ease;
+    opacity: 0;
+    animation: rowIn 0.5s ease forwards;
+  }
+
+  .school-row:hover,
+  .school-row:focus-visible {
+    background: var(--bg-row-hover);
+    padding-left: 16px;
+  }
+
+  .school-row:focus-visible {
+    outline: 2px solid var(--accent-amber);
+    outline-offset: -2px;
+  }
+
+  @keyframes rowIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .school-name {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .school-name .campus {
+    display: block;
+    margin-top: 3px;
+    font-size: 12.5px;
+    font-weight: 400;
+    color: var(--text-secondary);
+  }
+
+  .cta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .cta-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--accent-amber-dim);
+    transition: color 0.18s ease;
+  }
+
+  .school-row:hover .cta-label,
+  .school-row:focus-visible .cta-label {
+    color: var(--accent-amber);
+  }
+
+  .cta-bracket {
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    color: var(--divider);
+    transition: color 0.18s ease, transform 0.18s ease;
+  }
+
+  .school-row:hover .cta-bracket,
+  .school-row:focus-visible .cta-bracket {
+    color: var(--accent-amber);
+    transform: translateX(2px);
+  }
+
+  footer {
+    margin-top: 22px;
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .school-row, .status-dot {
+      animation: none;
+      opacity: 1;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .board { padding: 28px 20px 24px; }
+    .school-name { font-size: 15.5px; }
+    .cta-label { display: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="board">
+    <div class="status-row">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span class="status-text">LIVE RATIO</span>
+    </div>
+
+    <h1>수시 경쟁률 체크 페이지 [도영]</h1>
+    <p class="subtitle"><strong>2027학년도</strong> 수시 지원 대학 경쟁률 검색 [2026.09.07_자료연결 : 영주]</p>
+
+    <div class="divider-line"></div>
+
+    <ul class="school-list">
+      <li>
+        <a class="school-row" style="animation-delay:0.02s" href="https://ratio.uwayapply.com/Sl5KOTpWcldhVkpmJSY6Jko3ZlRm" target="_blank" rel="noopener noreferrer">
+          <span class="school-name">동덕여자대학교</span>
+          <span class="cta">
+            <span class="cta-label">경쟁률 확인</span>
+            <span class="cta-bracket" aria-hidden="true">▸</span>
+          </span>
+        </a>
+      </li>
+      <li>
+        <a class="school-row" style="animation-delay:0.08s" href="https://ratio.uwayapply.com/Sl5KZjpNJkpmJSY6Jko3ZlRm" target="_blank" rel="noopener noreferrer">
+          <span class="school-name">상명대학교<span class="campus">천안캠퍼스</span></span>
+          <span class="cta">
+            <span class="cta-label">경쟁률 확인</span>
+            <span class="cta-bracket" aria-hidden="true">▸</span>
+          </span>
+        </a>
+      </li>
+      <li>
+        <a class="school-row" style="animation-delay:0.14s" href="https://addon.jinhakapply.com/RatioV1/RatioH/Ratio30040971.html" target="_blank" rel="noopener noreferrer">
+          <span class="school-name">국립한밭대학교</span>
+          <span class="cta">
+            <span class="cta-label">경쟁률 확인</span>
+            <span class="cta-bracket" aria-hidden="true">▸</span>
+          </span>
+        </a>
+      </li>
+      <li>
+        <a class="school-row" style="animation-delay:0.20s" href="https://ratio.uwayapply.com/Sl5KcldhJmFhTkpmJSY6Jko3ZlRm" target="_blank" rel="noopener noreferrer">
+          <span class="school-name">우송대학교</span>
+          <span class="cta">
+            <span class="cta-label">경쟁률 확인</span>
+            <span class="cta-bracket" aria-hidden="true">▸</span>
+          </span>
+        </a>
+      </li>
+      <li>
+        <a class="school-row" style="animation-delay:0.26s" href="https://addon.jinhakapply.com/RatioV1/RatioH/Ratio10501131.html" target="_blank" rel="noopener noreferrer">
+          <span class="school-name">대전대학교</span>
+          <span class="cta">
+            <span class="cta-label">경쟁률 확인</span>
+            <span class="cta-bracket" aria-hidden="true">▸</span>
+          </span>
+        </a>
+      </li>
+      <li>
+        <a class="school-row" style="animation-delay:0.32s" href="https://addon.jinhakapply.com/RatioV1/RatioH/Ratio11560931.html" target="_blank" rel="noopener noreferrer">
+          <span class="school-name">한남대학교</span>
+          <span class="cta">
+            <span class="cta-label">경쟁률 확인</span>
+            <span class="cta-bracket" aria-hidden="true">▸</span>
+          </span>
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  <footer>
+    학교명을 클릭하면 각 대학의 공식 경쟁률 서비스 페이지로 이동합니다.<br>
+    실시간 수치는 각 대학 원서접수처 기준입니다.
+  </footer>
+</main>
+</body>
+</html>
